@@ -1,0 +1,23 @@
+{
+  "courses": [
+    {
+      "id": "mwrodeccmqfg",
+      "title": "First Year",
+      "description": "",
+      "sections": [
+        {
+          "id": "mwrodx1h3a6l",
+          "title": "1 Semester",
+          "materials": [
+            {
+              "id": "mwroeocxq1iz",
+              "title": "lecture 1",
+              "url": "files/1795342227163-02_-_DataType_and_Conditions.pdf",
+              "type": "pdf"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

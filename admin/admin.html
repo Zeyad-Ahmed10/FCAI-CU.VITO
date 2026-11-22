@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin | FCAI-CU</title><link rel="stylesheet" href="/style.css">
+</head><body>
+<div class="blob b1"></div><div class="blob b2"></div>
+<header class="nav"><a href="/" class="brand"><span class="r">FCAI</span><span class="d">-</span><span class="b">CU</span></a><span style="margin-left:16px;color:var(--gray)">Admin</span></header>
+<main class="wrap" id="app"></main>
+<script>
+let C = { courses: [] }, cid = '', mode = 'file', msg = '', busy = false;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const app = document.getElementById('app');
+const course = () => C.courses.find((c) => c.id === cid);
+
+function detect(u) {
+  u = u.toLowerCase();
+  if (u.includes('drive.google.com') || u.includes('docs.google.com')) return 'drive';
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+  if (/\.pdf(\?|$)/.test(u)) return 'pdf';
+  if (/\.(mp4|webm|mov)(\?|$)/.test(u)) return 'video';
+  if (/\.(png|jpe?g|gif|webp|svg)(\?|$)/.test(u)) return 'image';
+  return 'link';
+}
+const typeOf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) ? 'pdf' : f.type.startsWith('video') ? 'video' : f.type.startsWith('image') ? 'image' : 'link';
+async function save(m) { await fetch('/api/content', { method: 'POST', body: JSON.stringify(C) }); msg = m || 'Saved'; render(); setTimeout(() => { msg = ''; render(); }, 3000); }
+
+function render() {
+  const c = course();
+  app.innerHTML = `<h1 style="font-size:34px">Admin</h1>
+  <p style="color:var(--gray);margin-top:6px">Changes save to <b>content.json</b> and <b>files/</b> on this computer. Publish them to GitHub to put them online.</p>
+  ${msg ? `<div class="ok">${esc(msg)}</div>` : ''}
+  <h2 class="sec">Courses</h2>
+  <div class="dash-grid">
+    <form class="card" id="fc"><h3>New course</h3><label>Title</label><input name="t" required><label>Description</label><input name="d">
+      <button class="btn red" style="margin-top:16px">Add course</button></form>
+    <div class="card"><h3>All courses</h3>${C.courses.length ? '' : '<p>No courses yet.</p>'}
+      ${C.courses.map((x) => `<div class="row"><span>${esc(x.title)}</span><button class="btn ghost sm" data-delc="${x.id}">Delete</button></div>`).join('')}</div>
+  </div>
+  ${c ? `<h2 class="sec">Content of <select id="sel" style="width:auto;margin-left:12px">${C.courses.map((x) => `<option value="${x.id}" ${x.id === cid ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select></h2>
+  <div class="dash-grid"><div>
+    <form class="card" id="fs"><h3>New section</h3><label>Title (e.g. Lecture 1)</label><input name="t" required>
+      <button class="btn red" style="margin-top:16px">Add section</button></form>
+    <form class="card" id="fm" style="margin-top:18px"><h3>New material</h3>
+      <label>Section</label><select name="s">${c.sections.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}</select>
+      <label>Title</label><input name="t" required>
+      <div class="seg">${[['file', 'From device'], ['link', 'Drive / link'], ['note', 'Note']].map(([k, v]) => `<button type="button" class="${mode === k ? 'on' : ''}" data-mode="${k}">${v}</button>`).join('')}</div>
+      ${mode === 'file' ? '<label>PDF, video or image</label><input type="file" name="f" accept=".pdf,video/*,image/*" required>' : ''}
+      ${mode === 'link' ? '<label>Google Drive, YouTube or direct link</label><input name="u" placeholder="https://drive.google.com/file/d/..." required>' : ''}
+      ${mode === 'note' ? '<label>Text</label><textarea name="n" rows="5" required></textarea>' : ''}
+      <button class="btn" style="margin-top:16px" ${busy ? 'disabled' : ''}>${busy ? 'Uploading...' : 'Add material'}</button></form>
+  </div>
+  <div class="card"><h3>Sections and materials</h3>${c.sections.length ? '' : '<p>Add a section first.</p>'}
+    ${c.sections.map((s) => `<div style="margin-top:14px"><div class="row"><b>${esc(s.title)}</b><button class="btn ghost sm" data-dels="${s.id}">Delete</button></div>
+      ${s.materials.map((m) => `<div class="row" style="padding-left:14px"><span>${esc(m.title)} <span class="tag">${m.type}</span></span><button class="btn ghost sm" data-delm="${m.id}">Delete</button></div>`).join('')}</div>`).join('')}</div>
+  </div>` : ''}`;
+
+  const $ = (s) => app.querySelector(s);
+  $('#fc').onsubmit = (e) => { e.preventDefault(); const f = e.target; const n = { id: uid(), title: f.t.value, description: f.d.value, sections: [] }; C.courses.push(n); cid = n.id; save('Course added'); };
+  if (c) {
+    $('#sel').onchange = (e) => { cid = e.target.value; render(); };
+    $('#fs').onsubmit = (e) => { e.preventDefault(); c.sections.push({ id: uid(), title: e.target.t.value, materials: [] }); save('Section added'); };
+    $('#fm').onsubmit = async (e) => {
+      e.preventDefault(); const f = e.target, sec = c.sections.find((s) => s.id === f.s.value);
+      if (!sec) { msg = 'Add a section first'; return render(); }
+      const m = { id: uid(), title: f.t.value };
+      if (mode === 'file') {
+        const file = f.f.files[0]; busy = true; render();
+        const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-filename': encodeURIComponent(file.name) }, body: file });
+        m.url = (await r.json()).url; m.type = typeOf(file); busy = false;
+      } else if (mode === 'link') { m.url = f.u.value; m.type = detect(f.u.value); }
+      else { m.note = f.n.value; m.type = 'note'; }
+      sec.materials.push(m); save('Material added');
+    };
+    app.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { mode = b.dataset.mode; render(); });
+    app.querySelectorAll('[data-dels]').forEach((b) => b.onclick = () => { if (confirm('Delete this section?')) { c.sections = c.sections.filter((s) => s.id !== b.dataset.dels); save('Deleted'); } });
+    app.querySelectorAll('[data-delm]').forEach((b) => b.onclick = () => { if (confirm('Delete this material?')) { c.sections.forEach((s) => (s.materials = s.materials.filter((m) => m.id !== b.dataset.delm))); save('Deleted'); } });
+  }
+  app.querySelectorAll('[data-delc]').forEach((b) => b.onclick = () => { if (confirm('Delete this course?')) { C.courses = C.courses.filter((x) => x.id !== b.dataset.delc); cid = C.courses[0]?.id || ''; save('Deleted'); } });
+}
+(async () => { C = await (await fetch('/api/content')).json(); cid = C.courses[0]?.id || ''; render(); })();
+</script>
+</body></html>
