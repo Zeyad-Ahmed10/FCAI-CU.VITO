@@ -16,10 +16,3 @@ GitHub Pages بيحدّث الموقع بعد دقيقة.
 ## اختصارات الفيديو
 Space/K تشغيل · ←/→ ٥ ثواني · ↑/↓ الصوت · M كتم · F فول سكرين · C ترجمة
 عجلة الماوس بتغيّر الصوت في الفول سكرين بس.
-
-## مفتاح Drive (اختياري، بيخلي فيديوهات الدرايف تشتغل في المشغل الجديد بترجمة)
-1. console.cloud.google.com ← مشروع جديد.
-2. APIs & Services ← Library ← Google Drive API ← Enable.
-3. Credentials ← Create credentials ← API key، وانسخه.
-4. في الداش بورد: تبويب "Drive key" والصقه واحفظ.
-الملفات والفولدرات على درايف لازم تكون مشاركتها "Anyone with the link".

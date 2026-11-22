@@ -1,13 +1,19 @@
 <!doctype html>
-<html lang="en" translate="no"><!-- translate=no: يمنع Chrome يترجم الصفحة --><head>
-<meta charset="utf-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FCAI-CU | Computer Science</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="hub.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-</head><body>
-<div class="blob b1"></div><div class="blob b2"></div>
-<header class="nav"><a href="#/" class="brand"><span class="r">FCAI</span><span class="d">-</span><span class="b">CU</span></a></header>
-<main class="wrap" id="app"></main>
+<script>try{document.documentElement.dataset.theme=localStorage.theme||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
+</head><body class="hub">
+<aside id="side"></aside>
+<div id="main">
+  <div class="tb"><button class="hb ib" id="mn" aria-label="Menu">&#9776;</button><div class="bc" id="bc"></div>
+    <div class="sb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg><input id="q" placeholder="Search..." autocomplete="off"></div>
+    <button class="hb ib" id="th" title="Theme">&#9680;</button></div>
+  <main class="wrap" id="app"></main>
+</div>
 <script src="app.js"></script>
 </body></html>
