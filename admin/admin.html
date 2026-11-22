@@ -5,79 +5,140 @@
 </head><body>
 <div class="blob b1"></div><div class="blob b2"></div>
 <header class="nav"><a href="/" class="brand"><span class="r">FCAI</span><span class="d">-</span><span class="b">CU</span></a><span style="margin-left:16px;color:var(--gray)">Admin</span></header>
-<main class="wrap" id="app"></main>
+<main class="wrap">
+  <h1 style="font-size:34px">Admin</h1>
+  <p class="muted" style="margin:6px 0 4px">Changes are saved on this computer (<b>content.json</b> and <b>files/</b>). Push them to GitHub to put them online.</p>
+  <div id="msg"></div>
+  <div class="adm">
+    <div class="card"><h3>Folders and files</h3>
+      <p class="muted" style="font-size:13px;margin-bottom:8px">Click a folder to choose where new items go. Hold an item and drag it to move it into a folder or to reorder.</p>
+      <div class="tree" id="tree"></div></div>
+    <div class="card"><h3 id="target"></h3><div class="tabs" id="tabs"></div><form id="form"></form></div>
+  </div>
+</main>
 <script>
-let C = { courses: [] }, cid = '', mode = 'file', msg = '', busy = false;
+let T = { nodes: [] }, sel = 'root', mode = 'folder', busy = '', expanded = new Set(), justDragged = false;
+const $ = (s) => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const app = document.getElementById('app');
-const course = () => C.courses.find((c) => c.id === cid);
 
-function detect(u) {
-  u = u.toLowerCase();
-  if (u.includes('drive.google.com') || u.includes('docs.google.com')) return 'drive';
-  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
-  if (/\.pdf(\?|$)/.test(u)) return 'pdf';
-  if (/\.(mp4|webm|mov)(\?|$)/.test(u)) return 'video';
-  if (/\.(png|jpe?g|gif|webp|svg)(\?|$)/.test(u)) return 'image';
-  return 'link';
+function migrate(d) {
+  if (d.nodes) return d;
+  const f = (m) => ({ id: m.id, type: 'file', title: m.title, kind: m.type, url: m.url, note: m.note });
+  return { nodes: (d.courses || []).map((c) => ({ id: c.id, type: 'folder', title: c.title, children: c.sections.map((s) => ({ id: s.id, type: 'folder', title: s.title, children: s.materials.map(f) })) })) };
 }
-const typeOf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) ? 'pdf' : f.type.startsWith('video') ? 'video' : f.type.startsWith('image') ? 'image' : 'link';
-async function save(m) { await fetch('/api/content', { method: 'POST', body: JSON.stringify(C) }); msg = m || 'Saved'; render(); setTimeout(() => { msg = ''; render(); }, 3000); }
+const EXT = { video: 'mp4 webm mov mkv avi m4v ogv wmv flv 3gp mpeg mpg', image: 'png jpg jpeg gif webp svg bmp', office: 'doc docx ppt pptx xls xlsx odt odp ods rtf', text: 'txt md csv log py js ts jsx tsx java c cpp h hpp cs go rs rb php swift kt sql sh bash html css json xml yml yaml r m lua pl dart scala' };
+function kindOf(name) { const e = name.split('?')[0].split('.').pop().toLowerCase(); if (e === 'pdf') return 'pdf'; for (const k in EXT) if (EXT[k].split(' ').includes(e)) return k; return 'file'; }
+function detect(u) { const l = u.toLowerCase(); if (l.includes('drive.google.com') || l.includes('docs.google.com')) return 'drive'; if (l.includes('youtube.com') || l.includes('youtu.be')) return 'youtube'; const k = kindOf(l); return k === 'file' ? 'link' : k; }
 
-function render() {
-  const c = course();
-  app.innerHTML = `<h1 style="font-size:34px">Admin</h1>
-  <p style="color:var(--gray);margin-top:6px">Changes save to <b>content.json</b> and <b>files/</b> on this computer. Publish them to GitHub to put them online.</p>
-  ${msg ? `<div class="ok">${esc(msg)}</div>` : ''}
-  <h2 class="sec">Courses</h2>
-  <div class="dash-grid">
-    <form class="card" id="fc"><h3>New course</h3><label>Title</label><input name="t" required><label>Description</label><input name="d">
-      <button class="btn red" style="margin-top:16px">Add course</button></form>
-    <div class="card"><h3>All courses</h3>${C.courses.length ? '' : '<p>No courses yet.</p>'}
-      ${C.courses.map((x) => `<div class="row"><span>${esc(x.title)}</span><button class="btn ghost sm" data-delc="${x.id}">Delete</button></div>`).join('')}</div>
-  </div>
-  ${c ? `<h2 class="sec">Content of <select id="sel" style="width:auto;margin-left:12px">${C.courses.map((x) => `<option value="${x.id}" ${x.id === cid ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select></h2>
-  <div class="dash-grid"><div>
-    <form class="card" id="fs"><h3>New section</h3><label>Title (e.g. Lecture 1)</label><input name="t" required>
-      <button class="btn red" style="margin-top:16px">Add section</button></form>
-    <form class="card" id="fm" style="margin-top:18px"><h3>New material</h3>
-      <label>Section</label><select name="s">${c.sections.map((s) => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}</select>
-      <label>Title</label><input name="t" required>
-      <div class="seg">${[['file', 'From device'], ['link', 'Drive / link'], ['note', 'Note']].map(([k, v]) => `<button type="button" class="${mode === k ? 'on' : ''}" data-mode="${k}">${v}</button>`).join('')}</div>
-      ${mode === 'file' ? '<label>PDF, video or image</label><input type="file" name="f" accept=".pdf,video/*,image/*" required>' : ''}
-      ${mode === 'link' ? '<label>Google Drive, YouTube or direct link</label><input name="u" placeholder="https://drive.google.com/file/d/..." required>' : ''}
-      ${mode === 'note' ? '<label>Text</label><textarea name="n" rows="5" required></textarea>' : ''}
-      <button class="btn" style="margin-top:16px" ${busy ? 'disabled' : ''}>${busy ? 'Uploading...' : 'Add material'}</button></form>
-  </div>
-  <div class="card"><h3>Sections and materials</h3>${c.sections.length ? '' : '<p>Add a section first.</p>'}
-    ${c.sections.map((s) => `<div style="margin-top:14px"><div class="row"><b>${esc(s.title)}</b><button class="btn ghost sm" data-dels="${s.id}">Delete</button></div>
-      ${s.materials.map((m) => `<div class="row" style="padding-left:14px"><span>${esc(m.title)} <span class="tag">${m.type}</span></span><button class="btn ghost sm" data-delm="${m.id}">Delete</button></div>`).join('')}</div>`).join('')}</div>
-  </div>` : ''}`;
+/* ===== شجرة ===== */
+function locate(id, arr = T.nodes) { for (let i = 0; i < arr.length; i++) { const n = arr[i]; if (n.id === id) return { n, arr, i }; if (n.children) { const r = locate(id, n.children); if (r) return r; } } return null; }
+const contains = (n, id) => (n.children || []).some((c) => c.id === id || contains(c, id));
+function targetFolder() { if (sel === 'root') return { children: T.nodes, title: 'Top level' }; const l = locate(sel); if (!l) return { children: T.nodes, title: 'Top level' }; return l.n.type === 'folder' ? l.n : (locate(sel) && findParent(sel)) || { children: T.nodes, title: 'Top level' }; }
+function findParent(id, arr = T.nodes, parent = null) { for (const n of arr) { if (n.id === id) return parent; if (n.children) { const r = findParent(id, n.children, n); if (r) return r; } } return null; }
+function pathOf(f) { const out = []; (function walk(arr, acc) { for (const n of arr) { if (n === f) { out.push(...acc); return true; } if (n.children && walk(n.children, [...acc, n.title])) return true; } })(T.nodes, []); return out.concat(f.title === 'Top level' ? [] : [f.title]).join(' / ') || 'Top level'; }
 
-  const $ = (s) => app.querySelector(s);
-  $('#fc').onsubmit = (e) => { e.preventDefault(); const f = e.target; const n = { id: uid(), title: f.t.value, description: f.d.value, sections: [] }; C.courses.push(n); cid = n.id; save('Course added'); };
-  if (c) {
-    $('#sel').onchange = (e) => { cid = e.target.value; render(); };
-    $('#fs').onsubmit = (e) => { e.preventDefault(); c.sections.push({ id: uid(), title: e.target.t.value, materials: [] }); save('Section added'); };
-    $('#fm').onsubmit = async (e) => {
-      e.preventDefault(); const f = e.target, sec = c.sections.find((s) => s.id === f.s.value);
-      if (!sec) { msg = 'Add a section first'; return render(); }
-      const m = { id: uid(), title: f.t.value };
-      if (mode === 'file') {
-        const file = f.f.files[0]; busy = true; render();
-        const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-filename': encodeURIComponent(file.name) }, body: file });
-        m.url = (await r.json()).url; m.type = typeOf(file); busy = false;
-      } else if (mode === 'link') { m.url = f.u.value; m.type = detect(f.u.value); }
-      else { m.note = f.n.value; m.type = 'note'; }
-      sec.materials.push(m); save('Material added');
-    };
-    app.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { mode = b.dataset.mode; render(); });
-    app.querySelectorAll('[data-dels]').forEach((b) => b.onclick = () => { if (confirm('Delete this section?')) { c.sections = c.sections.filter((s) => s.id !== b.dataset.dels); save('Deleted'); } });
-    app.querySelectorAll('[data-delm]').forEach((b) => b.onclick = () => { if (confirm('Delete this material?')) { c.sections.forEach((s) => (s.materials = s.materials.filter((m) => m.id !== b.dataset.delm))); save('Deleted'); } });
-  }
-  app.querySelectorAll('[data-delc]').forEach((b) => b.onclick = () => { if (confirm('Delete this course?')) { C.courses = C.courses.filter((x) => x.id !== b.dataset.delc); cid = C.courses[0]?.id || ''; save('Deleted'); } });
+async function save(m) {
+  await fetch('/api/content', { method: 'POST', body: JSON.stringify(T) });
+  $('#msg').innerHTML = `<div class="ok">${esc(m || 'Saved')}</div>`; setTimeout(() => ($('#msg').innerHTML = ''), 2500);
+  renderTree();
 }
-(async () => { C = await (await fetch('/api/content')).json(); cid = C.courses[0]?.id || ''; render(); })();
+function move(id, tid, pos) {
+  if (id === tid) return;
+  const src = locate(id); if (!src) return;
+  if (tid !== 'root' && src.n.type === 'folder' && contains(src.n, tid)) return;
+  src.arr.splice(src.i, 1);
+  if (tid === 'root') T.nodes.push(src.n);
+  else { const t = locate(tid); if (pos === 'in' && t.n.type === 'folder') { t.n.children.push(src.n); expanded.add(t.n.id); } else t.arr.splice(t.i + (pos === 'after' ? 1 : 0), 0, src.n); }
+  save('Moved');
+}
+
+function treeHTML(nodes, depth) {
+  return nodes.map((n) => {
+    const folder = n.type === 'folder', open = expanded.has(n.id);
+    return `<div class="trow ${sel === n.id ? 'sel' : ''}" data-row="${n.id}" style="padding-left:${depth * 20 + 6}px"><span class="grip" title="Drag">⋮⋮</span>
+      <span class="car">${folder ? (open ? '▾' : '▸') : ''}</span><span class="tt">${folder ? '📁 ' : ''}${esc(n.title)}${folder ? '' : ` <span class="tag">${n.kind}</span>`}</span>
+      <button data-ren="${n.id}" title="Rename">✎</button><button data-del="${n.id}" title="Delete">✕</button></div>` + (folder && open ? treeHTML(n.children, depth + 1) : '');
+  }).join('');
+}
+function renderTree() {
+  $('#tree').innerHTML = `<div class="trow ${sel === 'root' ? 'sel' : ''}" data-row="root"><span class="tt">🏠 Top level</span></div>` + treeHTML(T.nodes, 1) + (T.nodes.length ? '' : '<p class="muted" style="padding:10px">Nothing yet. Create your first folder on the right (e.g. First year).</p>');
+  $('#target').textContent = 'Add to: ' + pathOf(targetFolder());
+}
+$('#tree').addEventListener('click', (e) => {
+  if (justDragged) return;
+  const ren = e.target.closest('[data-ren]'), del = e.target.closest('[data-del]'), row = e.target.closest('[data-row]');
+  if (ren) { const l = locate(ren.dataset.ren), t = prompt('New name', l.n.title); if (t && t.trim()) { l.n.title = t.trim(); save('Renamed'); } return; }
+  if (del) { const l = locate(del.dataset.del); if (confirm(`Delete "${l.n.title}"${l.n.type === 'folder' ? ' and everything inside it' : ''}?`)) { l.arr.splice(l.i, 1); if (sel === l.n.id) sel = 'root'; save('Deleted'); } return; }
+  if (row) { const id = row.dataset.row; sel = id; if (id !== 'root') { const n = locate(id).n; if (n.type === 'folder') expanded.has(id) ? expanded.delete(id) : expanded.add(id); } renderTree(); }
+});
+
+/* ===== السحب بالضغط المطوّل ===== */
+$('#tree').addEventListener('pointerdown', (e) => {
+  const row = e.target.closest('[data-row]');
+  if (!row || row.dataset.row === 'root' || e.target.closest('button') || e.button > 0) return;
+  if (e.pointerType === 'touch' && !e.target.closest('.grip')) return;
+  const id = row.dataset.row, x = e.clientX, y = e.clientY;
+  const cancel = () => { clearTimeout(timer); removeEventListener('pointerup', cancel); removeEventListener('pointermove', mv); };
+  const mv = (ev) => { if (Math.hypot(ev.clientX - x, ev.clientY - y) > 8) cancel(); };
+  const timer = setTimeout(() => { cancel(); startDrag(id, row, x, y); }, e.pointerType === 'touch' ? 120 : 400);
+  addEventListener('pointermove', mv); addEventListener('pointerup', cancel);
+});
+function startDrag(id, row, x, y) {
+  const g = document.createElement('div'); g.className = 'dragghost'; g.textContent = row.querySelector('.tt').textContent.trim(); document.body.appendChild(g);
+  document.body.classList.add('dragging'); row.style.opacity = '.4';
+  let tid = null, pos = null;
+  const clear = () => document.querySelectorAll('.drop-in,.drop-before,.drop-after').forEach((r) => r.classList.remove('drop-in', 'drop-before', 'drop-after'));
+  const place = (ev) => {
+    g.style.left = ev.clientX + 12 + 'px'; g.style.top = ev.clientY + 12 + 'px'; clear(); tid = pos = null;
+    const r = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-row]'); if (!r) return;
+    const rid = r.dataset.row, n = rid === 'root' ? null : locate(rid).n, b = r.getBoundingClientRect(), f = (ev.clientY - b.top) / b.height;
+    const folder = !n || n.type === 'folder';
+    if (rid === id || (n && locate(id).n.type === 'folder' && contains(locate(id).n, rid))) return;
+    pos = !n ? 'in' : folder ? (f < 0.25 ? 'before' : f > 0.75 ? 'after' : 'in') : (f < 0.5 ? 'before' : 'after');
+    tid = rid; r.classList.add('drop-' + pos);
+  };
+  const up = () => {
+    removeEventListener('pointermove', place); removeEventListener('pointerup', up);
+    g.remove(); clear(); row.style.opacity = ''; document.body.classList.remove('dragging');
+    justDragged = true; setTimeout(() => (justDragged = false), 50);
+    if (tid) move(id, tid, pos);
+  };
+  place({ clientX: x, clientY: y }); addEventListener('pointermove', place); addEventListener('pointerup', up);
+}
+
+/* ===== الفورم ===== */
+const TABS = [['folder', 'New folder'], ['file', 'Upload from device'], ['link', 'Drive / link'], ['note', 'Note']];
+function renderForm() {
+  $('#tabs').innerHTML = TABS.map(([k, v]) => `<button type="button" class="${mode === k ? 'on' : ''}" data-m="${k}">${v}</button>`).join('');
+  const F = {
+    folder: '<label>Folder name (e.g. First year, 1 Semester, Week 1, Lecture, Record)</label><input name="t" required>',
+    file: '<label>Files (PDF, video, PowerPoint, Word, text, code...) — you can choose many</label><input type="file" name="f" multiple required><label>Title (optional, defaults to the file name)</label><input name="t"><label>Subtitle file for the video (.srt or .vtt, optional)</label><input type="file" name="s" accept=".srt,.vtt">',
+    link: '<label>Google Drive, YouTube or direct link</label><input name="u" placeholder="https://drive.google.com/file/d/..." required><label>Title</label><input name="t" required><label>Subtitle link (.srt/.vtt, optional, direct videos only)</label><input name="s">',
+    note: '<label>Title</label><input name="t" required><label>Text</label><textarea name="n" rows="6" required></textarea>',
+  };
+  $('#form').innerHTML = F[mode] + `<button class="btn ${mode === 'folder' ? 'red' : ''}" style="margin-top:16px" ${busy ? 'disabled' : ''}>${busy || 'Add'}</button>`;
+}
+$('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (b) { mode = b.dataset.m; renderForm(); } });
+async function upload(file) { const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-filename': encodeURIComponent(file.name) }, body: file }); return (await r.json()).url; }
+$('#form').addEventListener('submit', async (e) => {
+  e.preventDefault(); const f = e.target, dest = targetFolder().children;
+  if (mode === 'folder') { const n = { id: uid(), type: 'folder', title: f.t.value.trim(), children: [] }; dest.push(n); if (sel !== 'root' && locate(sel)?.n.type === 'folder') expanded.add(sel); await save('Folder added'); }
+  else if (mode === 'file') {
+    const files = [...f.f.files], sub = f.s.files[0], one = files.length === 1;
+    try {
+      const subUrl = sub ? await upload(sub) : undefined;
+      for (let i = 0; i < files.length; i++) {
+        busy = `Uploading ${i + 1}/${files.length}...`; renderForm();
+        const url = await upload(files[i]), kind = kindOf(files[i].name);
+        dest.push({ id: uid(), type: 'file', title: (one && f.t.value.trim()) || files[i].name.replace(/\.[^.]+$/, ''), kind, url, ...(subUrl && kind === 'video' ? { subtitle: subUrl } : {}) });
+      }
+    } finally { busy = ''; }
+    await save(files.length + ' file(s) added');
+  } else if (mode === 'link') dest.push({ id: uid(), type: 'file', title: f.t.value.trim(), kind: detect(f.u.value), url: f.u.value.trim(), ...(f.s.value.trim() ? { subtitle: f.s.value.trim() } : {}) }), await save('Added');
+  else dest.push({ id: uid(), type: 'file', title: f.t.value.trim(), kind: 'note', note: f.n.value }), await save('Note added');
+  renderForm();
+});
+(async () => { T = migrate(await (await fetch('/api/content')).json()); renderTree(); renderForm(); })();
 </script>
 </body></html>

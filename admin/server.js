@@ -4,7 +4,7 @@ const ROOT = path.join(__dirname, '..'), CF = path.join(ROOT, 'content.json'), F
 const PORT = 3000;
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
 const read = () => { try { return JSON.parse(fs.readFileSync(CF, 'utf8')); } catch { return { courses: [] }; } };
-const localFiles = (d) => { const s = new Set(); (d.courses || []).forEach((c) => c.sections.forEach((x) => x.materials.forEach((m) => { if (m.url && m.url.startsWith('files/')) s.add(m.url); }))); return s; };
+const localFiles = (d) => new Set((JSON.stringify(d).match(/"(files\/[^"]+)"/g) || []).map((x) => x.slice(1, -1)));
 const body = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => ok(b)); });
 
 fs.mkdirSync(FD, { recursive: true });

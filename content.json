@@ -1,27 +1,56 @@
 {
-  "courses": [
+  "nodes": [
     {
-      "id": "mwrodeccmqfg",
+      "id": "mwrpei8yq139",
+      "type": "folder",
       "title": "First Year",
-      "description": "",
-      "sections": [
+      "children": [
         {
-          "id": "mwrodx1h3a6l",
+          "id": "mwrpez15tl1u",
+          "type": "folder",
           "title": "1 Semester",
-          "materials": [
+          "children": [
             {
-              "id": "mwroeocxq1iz",
-              "title": "lecture 1",
-              "url": "files/1795342227163-02_-_DataType_and_Conditions.pdf",
-              "type": "pdf"
+              "id": "mwrpft06x19t",
+              "type": "folder",
+              "title": "Math 0",
+              "children": []
             },
             {
-              "id": "mwrolwrcheyu",
-              "title": "ttt",
-              "url": "https://drive.google.com/file/d/1ETQQaxBu16WNkVreJN6jdg5uuqKa3I8o/view?usp=drive_link",
-              "type": "drive"
+              "id": "mwrpg31qilmd",
+              "type": "folder",
+              "title": "CS",
+              "children": [
+                {
+                  "id": "mwrphvq8cvv2",
+                  "type": "folder",
+                  "title": "lecture 1",
+                  "children": [
+                    {
+                      "id": "mwrpiaydni1e",
+                      "type": "folder",
+                      "title": "Pdf",
+                      "children": [
+                        {
+                          "id": "mwrpil6lepeb",
+                          "type": "file",
+                          "title": "lecture 1",
+                          "kind": "drive",
+                          "url": "https://drive.google.com/file/d/1u8gSF0Tq8JDUU2mr4e7WFZyHWx8PsdI0/view?usp=drive_link"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
+        },
+        {
+          "id": "mwrpf8maj4x3",
+          "type": "folder",
+          "title": "2 Semester",
+          "children": []
         }
       ]
     }
