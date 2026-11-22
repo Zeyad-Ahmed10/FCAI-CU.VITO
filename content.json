@@ -37,6 +37,15 @@
                   "title": "sss",
                   "kind": "youtube",
                   "url": "https://www.youtube.com/watch?v=dI0zO-AjQ1o&pp=ugUEEgJhcg%3D%3D"
+                },
+                {
+                  "id": "mwrzqq04tecb",
+                  "type": "file",
+                  "title": "yyyyyy",
+                  "kind": "drive",
+                  "url": "https://drive.google.com/file/d/1geY8m9Uv-S5kxLYeF1SpZIIigL4jR9tC/view?usp=drive_link",
+                  "video": true,
+                  "subtitle": "files/1795361264896-precalculus_intro_ar_exact_timestamps.srt"
                 }
               ]
             }
