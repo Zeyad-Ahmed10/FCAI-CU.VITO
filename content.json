@@ -1,63 +1,39 @@
 {
   "nodes": [
     {
-      "id": "mwrpei8yq139",
+      "id": "mwrza8iwaaxo",
       "type": "folder",
       "title": "First Year",
       "children": [
         {
-          "id": "mwrpez15tl1u",
+          "id": "mwrzaddaikgh",
           "type": "folder",
           "title": "1 Semester",
           "children": [
             {
-              "id": "mwrpft06x19t",
+              "id": "mwrzajxsd22a",
               "type": "folder",
-              "title": "Math 0",
-              "children": []
-            },
-            {
-              "id": "mwrpg31qilmd",
-              "type": "folder",
-              "title": "CS",
+              "title": "math 0",
               "children": [
                 {
-                  "id": "mwrphvq8cvv2",
-                  "type": "folder",
+                  "id": "mwrzchff8v0s",
+                  "type": "file",
                   "title": "lecture 1",
-                  "children": [
-                    {
-                      "id": "mwrpiaydni1e",
-                      "type": "folder",
-                      "title": "Pdf",
-                      "children": [
-                        {
-                          "id": "mwrprofjppot",
-                          "type": "file",
-                          "title": "lecture 1",
-                          "kind": "drive",
-                          "url": "https://drive.google.com/file/d/1ETQQaxBu16WNkVreJN6jdg5uuqKa3I8o/view?usp=drive_link"
-                        },
-                        {
-                          "id": "mwrpil6lepeb",
-                          "type": "file",
-                          "title": "lecture 1",
-                          "kind": "drive",
-                          "url": "https://drive.google.com/file/d/1u8gSF0Tq8JDUU2mr4e7WFZyHWx8PsdI0/view?usp=drive_link"
-                        }
-                      ]
-                    }
-                  ]
+                  "kind": "drive",
+                  "url": "https://drive.google.com/file/d/1eqP1w84BdJHEdmh8AAEugYImdyWBGTds/view?usp=drive_link",
+                  "video": true
+                },
+                {
+                  "id": "mwrzd7nyktnu",
+                  "type": "file",
+                  "title": "ttt",
+                  "kind": "drive",
+                  "url": "https://drive.google.com/file/d/1ETQQaxBu16WNkVreJN6jdg5uuqKa3I8o/view?usp=drive_link",
+                  "video": true
                 }
               ]
             }
           ]
-        },
-        {
-          "id": "mwrpf8maj4x3",
-          "type": "folder",
-          "title": "2 Semester",
-          "children": []
         }
       ]
     }

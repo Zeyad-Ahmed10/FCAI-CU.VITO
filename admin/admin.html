@@ -12,12 +12,12 @@
   <div class="adm">
     <div class="card"><h3>Folders and files</h3>
       <p class="muted" style="font-size:13px;margin-bottom:8px">Click a folder to choose where new items go. Hold an item and drag it to move it into a folder or to reorder.</p>
-      <div class="tree" id="tree"></div></div>
+      <div class="tree" id="tree"></div><input type="file" id="subpick" accept=".srt,.vtt" hidden></div>
     <div class="card"><h3 id="target"></h3><div class="tabs" id="tabs"></div><form id="form"></form></div>
   </div>
 </main>
 <script>
-let T = { nodes: [] }, sel = 'root', mode = 'folder', busy = '', expanded = new Set(), justDragged = false;
+let pendingCC = null, T = { nodes: [] }, sel = 'root', mode = 'folder', busy = '', expanded = new Set(), justDragged = false;
 const $ = (s) => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -57,8 +57,8 @@ function treeHTML(nodes, depth) {
   return nodes.map((n) => {
     const folder = n.type === 'folder', open = expanded.has(n.id);
     return `<div class="trow ${sel === n.id ? 'sel' : ''}" data-row="${n.id}" style="padding-left:${depth * 20 + 6}px"><span class="grip" title="Drag">⋮⋮</span>
-      <span class="car">${folder ? (open ? '▾' : '▸') : ''}</span><span class="tt">${folder ? '📁 ' : ''}${esc(n.title)}${folder ? '' : ` <span class="tag">${n.kind}</span>`}</span>
-      <button data-ren="${n.id}" title="Rename">✎</button><button data-del="${n.id}" title="Delete">✕</button></div>` + (folder && open ? treeHTML(n.children, depth + 1) : '');
+      <span class="car">${folder ? (open ? '▾' : '▸') : ''}</span><span class="tt">${folder ? '📁 ' : ''}${esc(n.title)}${folder ? '' : ` <span class="tag">${n.kind}${n.video ? ' · video' : ''}${n.subtitle ? ' · CC' : ''}</span>`}</span>
+      ${!folder && ['video', 'drive'].includes(n.kind) ? `<button data-cc="${n.id}" title="Attach subtitle (.srt / .vtt)">CC</button>` : ''}${!folder && n.kind === 'drive' ? `<button data-vid="${n.id}" title="Play with the custom video player">${n.video ? '🎬' : '▢'}</button>` : ''}<button data-ren="${n.id}" title="Rename">✎</button><button data-del="${n.id}" title="Delete">✕</button></div>` + (folder && open ? treeHTML(n.children, depth + 1) : '');
   }).join('');
 }
 function renderTree() {
@@ -67,6 +67,9 @@ function renderTree() {
 }
 $('#tree').addEventListener('click', (e) => {
   if (justDragged) return;
+  const cc = e.target.closest('[data-cc]'), vid = e.target.closest('[data-vid]');
+  if (cc) { pendingCC = cc.dataset.cc; $('#subpick').click(); return; }
+  if (vid) { const n = locate(vid.dataset.vid).n; n.video = !n.video; save(n.video ? 'Will use the custom player (falls back to Drive if blocked)' : 'Back to the Drive player'); return; }
   const ren = e.target.closest('[data-ren]'), del = e.target.closest('[data-del]'), row = e.target.closest('[data-row]');
   if (ren) { const l = locate(ren.dataset.ren), t = prompt('New name', l.n.title); if (t && t.trim()) { l.n.title = t.trim(); save('Renamed'); } return; }
   if (del) { const l = locate(del.dataset.del); if (confirm(`Delete "${l.n.title}"${l.n.type === 'folder' ? ' and everything inside it' : ''}?`)) { l.arr.splice(l.i, 1); if (sel === l.n.id) sel = 'root'; save('Deleted'); } return; }
@@ -114,7 +117,7 @@ function renderForm() {
   const F = {
     folder: '<label>Folder name (e.g. First year, 1 Semester, Week 1, Lecture, Record)</label><input name="t" required>',
     file: '<label>Files (PDF, video, PowerPoint, Word, text, code...) — you can choose many</label><input type="file" name="f" multiple required><label>Title (optional, defaults to the file name)</label><input name="t"><label>Subtitle file for the video (.srt or .vtt, optional)</label><input type="file" name="s" accept=".srt,.vtt">',
-    link: '<label>Google Drive, YouTube or direct link</label><input name="u" placeholder="https://drive.google.com/file/d/..." required><label>Title</label><input name="t" required><label>Subtitle link (.srt/.vtt, optional, direct videos only)</label><input name="s">',
+    link: '<label>Google Drive, YouTube or direct link</label><input name="u" placeholder="https://drive.google.com/file/d/..." required><label>Title</label><input name="t" required><label class="chk"><input type="checkbox" name="v"> This Drive file is a video (use the custom player)</label><label>Subtitle file (.srt or .vtt, optional)</label><input type="file" name="sf" accept=".srt,.vtt">',
     note: '<label>Title</label><input name="t" required><label>Text</label><textarea name="n" rows="6" required></textarea>',
   };
   $('#form').innerHTML = F[mode] + `<button class="btn ${mode === 'folder' ? 'red' : ''}" style="margin-top:16px" ${busy ? 'disabled' : ''}>${busy || 'Add'}</button>`;
@@ -135,9 +138,17 @@ $('#form').addEventListener('submit', async (e) => {
       }
     } finally { busy = ''; }
     await save(files.length + ' file(s) added');
-  } else if (mode === 'link') dest.push({ id: uid(), type: 'file', title: f.t.value.trim(), kind: detect(f.u.value), url: f.u.value.trim(), ...(f.s.value.trim() ? { subtitle: f.s.value.trim() } : {}) }), await save('Added');
+  } else if (mode === 'link') {
+    const kind = detect(f.u.value), sf = f.sf.files[0], sub = sf ? await upload(sf) : '';
+    dest.push({ id: uid(), type: 'file', title: f.t.value.trim(), kind, url: f.u.value.trim(), ...(f.v.checked && kind === 'drive' ? { video: true } : {}), ...(sub ? { subtitle: sub } : {}) });
+    await save('Added');
+  }
   else dest.push({ id: uid(), type: 'file', title: f.t.value.trim(), kind: 'note', note: f.n.value }), await save('Note added');
   renderForm();
+});
+$('#subpick').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; if (!file || !pendingCC) return;
+  const l = locate(pendingCC); l.n.subtitle = await upload(file); e.target.value = ''; await save('Subtitle attached');
 });
 (async () => { T = migrate(await (await fetch('/api/content')).json()); renderTree(); renderForm(); })();
 </script>

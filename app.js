@@ -37,38 +37,84 @@ function openUrl(f) {
 const drivePrev = (u) => { const m = u.match(/\/d\/([\w-]+)/) || u.match(/[?&]id=([\w-]+)/); return m ? `https://drive.google.com/file/d/${m[1]}/preview` : u; };
 const ytEmbed = (u) => { const m = u.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/); return m ? `https://www.youtube.com/embed/${m[1]}` : u; };
 
-/* ===== مشغل الفيديو ===== */
-function mountPlayer(box, f) {
-  box.innerHTML = `<div class="player" tabindex="0"><video preload="metadata" playsinline></video><div class="osd"></div>
-  <div class="ctrl"><input class="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
-  <div class="bar2"><button data-a="play" aria-label="Play">${ICON.play}</button><button data-a="back" aria-label="Back 5 seconds">-5</button><button data-a="fwd" aria-label="Forward 5 seconds">+5</button>
-  <button data-a="mute" aria-label="Mute">${ICON.vol}</button><input class="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
-  <span class="time">0:00 / 0:00</span><span class="sp"></span>
-  <select class="rate" aria-label="Speed">${[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => `<option value="${r}" ${r === 1 ? 'selected' : ''}>${r}x</option>`).join('')}</select>
-  <button data-a="cc" class="cc" hidden>CC</button><button data-a="fs" aria-label="Fullscreen">${ICON.fs}</button></div></div></div>`;
+/* ===== مشغل الفيديو (شكل YouTube/Plyr مع ترجمة مخصوصة) ===== */
+function parseSubs(t) {
+  t = t.replace(/\r/g, '').replace(/^\uFEFF/, ''); const out = [];
+  const T = (h, m, s, ms) => (+h || 0) * 3600 + +m * 60 + +s + +String(ms).padEnd(3, '0') / 1000;
+  t.split(/\n{2,}/).forEach((blk) => {
+    const l = blk.split('\n'), i = l.findIndex((x) => x.includes('-->')); if (i < 0) return;
+    const m = l[i].match(/(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})\s*-->\s*(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/); if (!m) return;
+    out.push({ s: T(m[1], m[2], m[3], m[4]), e: T(m[5], m[6], m[7], m[8]), t: l.slice(i + 1).join('\n').replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '').trim() });
+  });
+  return out;
+}
+async function fetchText(url) { // UTF-8 أو windows-1256 (عربي قديم)
+  const buf = await (await fetch(url)).arrayBuffer();
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return new TextDecoder('windows-1256').decode(buf); }
+}
+Object.assign(ICON, {
+  back: '<svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/><text x="12" y="16.3" font-size="7.5" font-weight="700" text-anchor="middle">5</text></svg>',
+  fwd: '<svg viewBox="0 0 24 24"><path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/><text x="12" y="16.3" font-size="7.5" font-weight="700" text-anchor="middle">5</text></svg>',
+  cc: '<svg viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm4.5 9.5c1 0 1.7-.4 2.1-1l-1-.7c-.2.3-.6.5-1 .5-.8 0-1.3-.6-1.3-1.5s.5-1.5 1.3-1.5c.4 0 .7.2 1 .5l1-.7c-.4-.6-1.100-1-2.100-1-1.600 0-2.700 1.100-2.700 2.700s1.100 2.700 2.700 2.700zm7 0c1 0 1.700-.4 2.100-1l-1-.7c-.2.3-.6.5-1 .5-.8 0-1.300-.6-1.300-1.500s.5-1.500 1.300-1.500c.4 0 .7.2 1 .5l1-.7c-.4-.6-1.100-1-2.100-1-1.600 0-2.700 1.100-2.700 2.700s1.100 2.700 2.700 2.700z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><path d="M12 8.500a3.500 3.500 0 1 0 0 7 3.500 3.500 0 0 0 0-7zm8.200 4.600l1.700 1.300-2 3.500-2-.8a7.500 7.500 0 0 1-1.800 1l-.3 2.100h-4l-.3-2.100a7.500 7.500 0 0 1-1.800-1l-2 .8-2-3.500 1.700-1.300a7.600 7.600 0 0 1 0-2.200L2.100 9.600l2-3.500 2 .8a7.500 7.500 0 0 1 1.800-1l.3-2.100h4l.3 2.100a7.500 7.500 0 0 1 1.800 1l2-.8 2 3.500-1.700 1.300c.1.700.1 1.500 0 2.200z" fill-rule="evenodd" opacity=".95"/></svg>',
+  pip: '<svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm7 4h6v4h-6z" fill-rule="evenodd"/></svg>',
+});
+function mountPlayer(box, f, opts = {}) {
+  const src = opts.src || f.url, fail = opts.onfail || (() => box.insertAdjacentHTML('beforeend', `<div class="err">This browser can't play this video format. MP4 (H.264) and WebM work everywhere; convert other formats to MP4.</div>`));
+  box.innerHTML = `<div class="player" tabindex="0"><video preload="metadata" playsinline></video><div class="subs" dir="auto"></div><div class="osd"></div>
+  <div class="menu" hidden><div class="mh"><b>Settings</b><button data-a="mclose" aria-label="Close">✕</button></div>
+   <div class="mr"><span>Speed</span><div class="chips">${[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => `<button data-rate="${r}" class="${r === 1 ? 'on' : ''}">${r}x</button>`).join('')}</div></div>
+   <div class="mr"><span>Zoom</span><div class="chips"><button data-z="-1">−</button><b class="zv">100%</b><button data-z="1">+</button></div></div>
+   <div class="mr msub" hidden><span>Subtitles</span><div class="chips"><button data-s="onoff" class="on">On</button><button data-s="-1">A−</button><button data-s="1">A+</button></div></div></div>
+  <div class="ctrl"><div class="seekrow"><span class="tl">0:00</span><input class="seek" type="range" min="0" max="1000" value="0" step="0.1" aria-label="Seek"><span class="tr">0:00</span></div>
+  <div class="bar2"><button data-a="play" aria-label="Play">${ICON.play}</button><button data-a="back" aria-label="Back 5 seconds">${ICON.back}</button><button data-a="fwd" aria-label="Forward 5 seconds">${ICON.fwd}</button>
+  <div class="volw"><button data-a="mute" aria-label="Mute">${ICON.vol}</button><input class="vol" type="range" min="0" max="100" value="100" aria-label="Volume"></div><span class="sp"></span>
+  <button data-a="cc" class="cc" aria-label="Subtitles" hidden>${ICON.cc}</button><button data-a="set" aria-label="Settings">${ICON.gear}</button>
+  <button data-a="pip" aria-label="Picture in picture" ${document.pictureInPictureEnabled ? '' : 'hidden'}>${ICON.pip}</button><button data-a="fs" aria-label="Fullscreen">${ICON.fs}</button></div></div></div>`;
   const P = box.querySelector('.player'), v = P.querySelector('video'), $ = (s) => P.querySelector(s);
-  const seek = $('.seek'), vol = $('.vol'), osd = $('.osd'), cc = $('.cc'), playB = $('[data-a=play]'), muteB = $('[data-a=mute]');
-  v.src = f.url;
-  let hover = false, idle, osdT;
+  const seek = $('.seek'), vol = $('.vol'), osd = $('.osd'), cc = $('.cc'), subsEl = $('.subs'), menu = $('.menu');
+  const playB = $('[data-a=play]'), muteB = $('[data-a=mute]');
+  let hover = false, idle, osdT, cues = [], zoom = 1, raf, shown = '', loaded = false;
+  let subsOn = localStorage.getItem('subs') !== 'off', subSz = +localStorage.getItem('subsz') || 1;
+  v.src = src;
+  const to = setTimeout(() => { if (!loaded && opts.timeout) { fail(); } }, opts.timeout || 0);
+
   const say = (t) => { osd.textContent = t; osd.classList.add('on'); clearTimeout(osdT); osdT = setTimeout(() => osd.classList.remove('on'), 900); };
   const toggle = () => (v.paused ? v.play() : v.pause());
   const skip = (d) => { v.currentTime = Math.min(Math.max(0, v.currentTime + d), v.duration || 1e9); say((d > 0 ? '+' : '') + d + 's'); };
   const setVol = (x) => { v.muted = false; v.volume = Math.min(1, Math.max(0, x)); say('Volume ' + Math.round(v.volume * 100) + '%'); };
   const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
   const fs = () => { if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document); else if (P.requestFullscreen) P.requestFullscreen(); else if (P.webkitRequestFullscreen) P.webkitRequestFullscreen(); else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); };
-  const subsOn = () => localStorage.getItem('subs') !== 'off';
-  const toggleSubs = () => { const t = v.textTracks[0]; if (!t) return; const on = t.mode !== 'showing'; t.mode = on ? 'showing' : 'disabled'; localStorage.setItem('subs', on ? 'on' : 'off'); cc.classList.toggle('off', !on); say(on ? 'Subtitles on' : 'Subtitles off'); };
+  const sizeSubs = () => (subsEl.style.fontSize = Math.max(15, P.clientHeight * 0.052 * subSz) + 'px');
+  const showSub = () => {
+    const t = v.currentTime, c = subsOn ? cues.find((q) => t >= q.s && t < q.e) : null, txt = c ? c.t : '';
+    if (txt !== shown) { shown = txt; subsEl.textContent = txt; }
+  };
+  const refreshSubUI = () => { cc.classList.toggle('off', !subsOn); $('[data-s=onoff]').textContent = subsOn ? 'On' : 'Off'; $('[data-s=onoff]').classList.toggle('on', subsOn); showSub(); };
+  const toggleSubs = () => { if (!cues.length) return; subsOn = !subsOn; localStorage.setItem('subs', subsOn ? 'on' : 'off'); refreshSubUI(); say(subsOn ? 'Subtitles on' : 'Subtitles off'); };
+  const setZoom = (d) => { zoom = Math.min(3, Math.max(1, zoom + d * 0.25)); v.style.transform = `scale(${zoom})`; $('.zv').textContent = Math.round(zoom * 100) + '%'; };
+  const tick = () => { showSub(); if (document.body.contains(P) && !v.paused) raf = requestAnimationFrame(tick); };
 
-  v.onplay = v.onpause = () => (playB.innerHTML = v.paused ? ICON.play : ICON.pause);
-  v.ontimeupdate = v.onloadedmetadata = () => { if (!seek.matches(':active')) seek.value = v.duration ? (v.currentTime / v.duration) * 1000 : 0; $('.time').textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration); };
-  v.onvolumechange = () => { vol.value = v.muted ? 0 : v.volume * 100; muteB.innerHTML = v.muted || v.volume === 0 ? ICON.mute : ICON.vol; };
-  v.onerror = () => { box.insertAdjacentHTML('beforeend', `<div class="err">This browser can't play this video format. MP4 (H.264) and WebM work everywhere; convert other formats to MP4.</div>`); };
-  seek.oninput = () => { if (v.duration) v.currentTime = (seek.value / 1000) * v.duration; };
+  v.onplay = () => { playB.innerHTML = ICON.pause; cancelAnimationFrame(raf); tick(); };
+  v.onpause = () => { playB.innerHTML = ICON.play; P.classList.remove('idle'); showSub(); };
+  const upd = () => { const p = v.duration ? (v.currentTime / v.duration) * 100 : 0; if (!seek.matches(':active')) seek.value = p * 10; seek.style.setProperty('--p', p + '%'); $('.tl').textContent = fmt(v.currentTime); $('.tr').textContent = fmt(v.duration); };
+  v.ontimeupdate = upd; v.onloadedmetadata = () => { loaded = true; clearTimeout(to); upd(); };
+  v.onvolumechange = () => { vol.value = v.muted ? 0 : v.volume * 100; vol.style.setProperty('--p', vol.value + '%'); muteB.innerHTML = v.muted || v.volume === 0 ? ICON.mute : ICON.vol; };
+  v.onerror = () => { clearTimeout(to); fail(); };
+  seek.oninput = () => { if (v.duration) v.currentTime = (seek.value / 1000) * v.duration; seek.style.setProperty('--p', seek.value / 10 + '%'); };
   vol.oninput = () => { v.muted = false; v.volume = vol.value / 100; };
-  $('.rate').onchange = (e) => { v.playbackRate = +e.target.value; };
-  P.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => ({ play: toggle, back: () => skip(-5), fwd: () => skip(5), mute: () => (v.muted = !v.muted), cc: toggleSubs, fs }[b.dataset.a])()));
-  v.onclick = () => { P.focus({ preventScroll: true }); toggle(); };
+  P.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => ({ play: toggle, back: () => skip(-5), fwd: () => skip(5), mute: () => (v.muted = !v.muted), cc: toggleSubs, fs,
+    set: () => (menu.hidden = !menu.hidden), mclose: () => (menu.hidden = true),
+    pip: () => (document.pictureInPictureElement ? document.exitPictureInPicture() : v.requestPictureInPicture()).catch(() => {}) }[b.dataset.a])()));
+  menu.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-rate]'), z = e.target.closest('[data-z]'), s = e.target.closest('[data-s]');
+    if (r) { v.playbackRate = +r.dataset.rate; menu.querySelectorAll('[data-rate]').forEach((b) => b.classList.toggle('on', b === r)); }
+    if (z) setZoom(+z.dataset.z);
+    if (s) { if (s.dataset.s === 'onoff') toggleSubs(); else { subSz = Math.min(2.2, Math.max(0.6, subSz + 0.15 * s.dataset.s)); localStorage.setItem('subsz', subSz); sizeSubs(); } }
+  });
+  v.onclick = () => { if (!menu.hidden) { menu.hidden = true; return; } P.focus({ preventScroll: true }); toggle(); };
   v.ondblclick = fs;
+  new ResizeObserver(sizeSubs).observe(P); sizeSubs();
 
   // عجلة الماوس للصوت في وضع الفول سكرين بس
   P.addEventListener('wheel', (e) => { if (fsEl() !== P) return; e.preventDefault(); setVol(v.volume + (e.deltaY < 0 ? 0.05 : -0.05)); }, { passive: false });
@@ -78,20 +124,14 @@ function mountPlayer(box, f) {
     if (!document.body.contains(P)) return document.removeEventListener('keydown', onKey);
     if (/TEXTAREA/.test(e.target.tagName) || e.target.type === 'text' || e.ctrlKey || e.metaKey || e.altKey) return;
     if (!(hover || fsEl() === P || P.contains(document.activeElement))) return;
-    const k = e.key, map = { ' ': toggle, k: toggle, ArrowRight: () => skip(5), ArrowLeft: () => skip(-5), ArrowUp: () => setVol(v.volume + 0.05), ArrowDown: () => setVol(v.volume - 0.05), m: () => (v.muted = !v.muted), f: fs, c: toggleSubs };
-    if (map[k]) { e.preventDefault(); map[k](); }
+    const map = { ' ': toggle, k: toggle, ArrowRight: () => skip(5), ArrowLeft: () => skip(-5), ArrowUp: () => setVol(v.volume + 0.05), ArrowDown: () => setVol(v.volume - 0.05), m: () => (v.muted = !v.muted), f: fs, c: toggleSubs };
+    if (map[e.key]) { e.preventDefault(); map[e.key](); }
   };
   document.addEventListener('keydown', onKey);
-  // إخفاء الأزرار لما الماوس يقف
-  P.onmousemove = () => { P.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(() => { if (!v.paused) P.classList.add('idle'); }, 2500); };
+  P.onmousemove = () => { P.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(() => { if (!v.paused && menu.hidden) P.classList.add('idle'); }, 2500); };
 
-  // الترجمة: SRT أو VTT، بتتركب تلقائي ولها زرار إيقاف
-  if (f.subtitle) fetch(f.subtitle).then((r) => r.text()).then((t) => {
-    if (!/^\s*WEBVTT/.test(t)) t = 'WEBVTT\n\n' + t.replace(/\r/g, '').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-    const tr = document.createElement('track'); tr.kind = 'subtitles'; tr.label = 'Subtitles'; tr.src = URL.createObjectURL(new Blob([t], { type: 'text/vtt' }));
-    v.appendChild(tr); tr.track.mode = subsOn() ? 'showing' : 'disabled';
-    cc.hidden = false; cc.classList.toggle('off', !subsOn());
-  }).catch(() => {});
+  // الترجمة بتتركب تلقائي من ملف .srt/.vtt ولها زرار إيقاف
+  if (f.subtitle) fetchText(f.subtitle).then((t) => { cues = parseSubs(t); if (cues.length) { cc.hidden = false; $('.msub').hidden = false; refreshSubUI(); } }).catch(() => {});
 }
 
 /* ===== عارض النصوص والكود ===== */
@@ -131,7 +171,13 @@ function mountViewer(host, f) {
   else if (k === 'text') mountText(b, f);
   else if (k === 'pdf') b.innerHTML = `<iframe class="frame tall" src="${u}" title="${esc(f.title)}"></iframe>`;
   else if (k === 'office') b.innerHTML = `<iframe class="frame tall" src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs(f.url))}"></iframe><p class="hint">The preview works once the site is online. Use "Open in new page" or Download otherwise.</p>`;
-  else if (k === 'drive') b.innerHTML = `<iframe class="frame tall" src="${esc(drivePrev(f.url))}" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+  else if (k === 'drive') {
+    const m = (f.url || '').match(/\/d\/([\w-]+)/) || (f.url || '').match(/[?&]id=([\w-]+)/);
+    const frame = () => { b.innerHTML = `<div class="dframe"><iframe class="frame ${f.video ? '' : 'tall'}" src="${esc(drivePrev(f.url))}" allow="autoplay; fullscreen" allowfullscreen></iframe><div class="dmask"></div></div>`; };
+    // فيديو درايف: بنجرب المشغل الجديد، ولو درايف رفض بنرجع لمشغل درايف تلقائي
+    if (f.video && m) mountPlayer(b, f, { src: `https://drive.usercontent.google.com/download?id=${m[1]}&export=download&confirm=t`, onfail: frame, timeout: 12000 });
+    else frame();
+  }
   else if (k === 'youtube') b.innerHTML = `<iframe class="frame" src="${esc(ytEmbed(f.url))}" allowfullscreen></iframe>`;
   else if (k === 'image') b.innerHTML = `<img class="img" src="${u}" alt="${esc(f.title)}">`;
   else if (k === 'note') { b.innerHTML = `<div class="tbar"><button class="btn ghost sm">Copy all</button></div><pre class="plain">${linkify(f.note)}</pre>`; b.querySelector('button').onclick = (e) => copyText(f.note || '', e.target); }
