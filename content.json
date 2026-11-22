@@ -1,51 +1,34 @@
 {
   "nodes": [
     {
-      "id": "mwrza8iwaaxo",
+      "id": "mws0j4nnhh19",
       "type": "folder",
       "title": "First Year",
       "children": [
         {
-          "id": "mwrzaddaikgh",
+          "id": "mws0jej15mt5",
           "type": "folder",
           "title": "1 Semester",
           "children": [
             {
-              "id": "mwrzajxsd22a",
+              "id": "mws0jky5kahc",
               "type": "folder",
-              "title": "math 0",
+              "title": "lecture 1",
               "children": [
                 {
-                  "id": "mwrzchff8v0s",
-                  "type": "file",
-                  "title": "lecture 1",
-                  "kind": "drive",
-                  "url": "https://drive.google.com/file/d/1eqP1w84BdJHEdmh8AAEugYImdyWBGTds/view?usp=drive_link",
-                  "video": true
-                },
-                {
-                  "id": "mwrzd7nyktnu",
+                  "id": "mws0j17udd5j",
                   "type": "file",
                   "title": "ttt",
                   "kind": "drive",
-                  "url": "https://drive.google.com/file/d/1ETQQaxBu16WNkVreJN6jdg5uuqKa3I8o/view?usp=drive_link",
-                  "video": true
-                },
-                {
-                  "id": "mwrzjbi8thgz",
-                  "type": "file",
-                  "title": "sss",
-                  "kind": "youtube",
-                  "url": "https://www.youtube.com/watch?v=dI0zO-AjQ1o&pp=ugUEEgJhcg%3D%3D"
-                },
-                {
-                  "id": "mwrzqq04tecb",
-                  "type": "file",
-                  "title": "yyyyyy",
-                  "kind": "drive",
                   "url": "https://drive.google.com/file/d/1geY8m9Uv-S5kxLYeF1SpZIIigL4jR9tC/view?usp=drive_link",
-                  "video": true,
-                  "subtitle": "files/1795361264896-precalculus_intro_ar_exact_timestamps.srt"
+                  "subtitle": "drive:1n2jtGh1wC-eFMttFUUhL6kJ7rObg0ACF"
+                },
+                {
+                  "id": "mws0kvtg1r5i",
+                  "type": "file",
+                  "title": "yyyy",
+                  "kind": "drive",
+                  "url": "https://drive.google.com/file/d/1u8gSF0Tq8JDUU2mr4e7WFZyHWx8PsdI0/view?usp=drive_link"
                 }
               ]
             }
@@ -53,5 +36,6 @@
         }
       ]
     }
-  ]
+  ],
+  "driveKey": "AIzaSyBYeej4IOxNifHHHNoma0kUTJFF13P7E3g"
 }

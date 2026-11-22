@@ -34,6 +34,9 @@ function openUrl(f) {
   if (f.kind === 'drive') { const m = (f.url || '').match(/\/d\/([\w-]+)/); return m ? `https://drive.google.com/file/d/${m[1]}/view` : f.url; }
   return f.kind === 'youtube' ? f.url : abs(f.url || '');
 }
+const driveId = (u) => ((u || '').match(/\/d\/([\w-]+)/) || (u || '').match(/[?&]id=([\w-]+)/) || [])[1];
+const driveMedia = (id) => `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${DATA.driveKey}`;
+const resolveSub = (u) => (u && u.startsWith('drive:') ? driveMedia(u.slice(6)) : u);
 const drivePrev = (u) => { const m = u.match(/\/d\/([\w-]+)/) || u.match(/[?&]id=([\w-]+)/); return m ? `https://drive.google.com/file/d/${m[1]}/preview` : u; };
 const ytEmbed = (u) => { const m = u.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/); return m ? `https://www.youtube.com/embed/${m[1]}` : u; };
 
@@ -59,9 +62,45 @@ Object.assign(ICON, {
   gear: '<svg viewBox="0 0 24 24"><path d="M12 8.500a3.500 3.500 0 1 0 0 7 3.500 3.500 0 0 0 0-7zm8.200 4.600l1.700 1.300-2 3.500-2-.8a7.500 7.500 0 0 1-1.800 1l-.3 2.100h-4l-.3-2.100a7.500 7.500 0 0 1-1.800-1l-2 .8-2-3.500 1.700-1.300a7.600 7.600 0 0 1 0-2.200L2.100 9.600l2-3.500 2 .8a7.500 7.500 0 0 1 1.800-1l.3-2.100h4l.3 2.100a7.500 7.500 0 0 1 1.800 1l2-.8 2 3.500-1.700 1.300c.1.700.1 1.500 0 2.200z" fill-rule="evenodd" opacity=".95"/></svg>',
   pip: '<svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm7 4h6v4h-6z" fill-rule="evenodd"/></svg>',
 });
+/* ===== YouTube بنفس المشغل: بنخفي أزراره ونتحكم فيه بالـ API ===== */
+const ytId = (u) => ((u || '').match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/) || [])[1];
+let ytLoad;
+const ytReady = () => ytLoad || (ytLoad = new Promise((ok) => {
+  if (window.YT && YT.Player) return ok();
+  const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s);
+  window.onYouTubeIframeAPIReady = ok;
+}));
+function ytAdapter(host, id, root) { // بيتصرف زي عنصر video عشان نفس المشغل يشتغل عليه
+  const a = { onended() {}, onplay() {}, onpause() {}, ontimeupdate() {}, onloadedmetadata() {}, onvolumechange() {}, onerror() {} };
+  let pl, ready = false, state = -1, timer, vol = 1, muted = false, rate = 1;
+  ytReady().then(() => {
+    pl = new YT.Player(host, { videoId: id, width: '100%', height: '100%',
+      playerVars: { controls: 0, disablekb: 1, fs: 0, rel: 0, modestbranding: 1, iv_load_policy: 3, playsinline: 1, cc_load_policy: 0 },
+      events: {
+        onReady: () => { ready = true; a.onloadedmetadata(); a.onvolumechange(); setTimeout(a.ontimeupdate, 600); setTimeout(a.ontimeupdate, 2000); },
+        onStateChange: (e) => {
+          state = e.data; clearInterval(timer);
+          if (state === 1) { a.onplay(); timer = setInterval(() => (document.body.contains(root) ? a.ontimeupdate() : clearInterval(timer)), 200); }
+          else { a.onpause(); a.ontimeupdate(); if (state === 0) a.onended(); }
+        },
+        onError: () => a.onerror(),
+      } });
+  });
+  Object.defineProperties(a, {
+    paused: { get: () => state !== 1 },
+    currentTime: { get: () => (ready ? pl.getCurrentTime() : 0), set: (t) => { if (ready) { pl.seekTo(t, true); setTimeout(a.ontimeupdate, 50); } } },
+    duration: { get: () => (ready ? pl.getDuration() : 0) },
+    volume: { get: () => vol, set: (x) => { vol = x; if (ready) pl.setVolume(x * 100); a.onvolumechange(); } },
+    muted: { get: () => muted, set: (m) => { muted = m; if (ready) m ? pl.mute() : pl.unMute(); a.onvolumechange(); } },
+    playbackRate: { get: () => rate, set: (r) => { rate = r; if (ready) pl.setPlaybackRate(r); } },
+  });
+  a.play = () => ready && pl.playVideo(); a.pause = () => ready && pl.pauseVideo();
+  return a;
+}
+
 function mountPlayer(box, f, opts = {}) {
   const src = opts.src || f.url, fail = opts.onfail || (() => box.insertAdjacentHTML('beforeend', `<div class="err">This browser can't play this video format. MP4 (H.264) and WebM work everywhere; convert other formats to MP4.</div>`));
-  box.innerHTML = `<div class="player" tabindex="0"><video preload="metadata" playsinline></video><div class="subs" dir="auto"></div><div class="osd"></div>
+  box.innerHTML = `<div class="player" tabindex="0"><div class="vwrap">${opts.yt ? '<div class="ytbox"></div>' : '<video preload="metadata" playsinline></video>'}</div><div class="catch"></div><div class="subs" dir="auto"></div><div class="osd"></div>
   <div class="menu" hidden><div class="mh"><b>Settings</b><button data-a="mclose" aria-label="Close">✕</button></div>
    <div class="mr"><span>Speed</span><div class="chips">${[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => `<button data-rate="${r}" class="${r === 1 ? 'on' : ''}">${r}x</button>`).join('')}</div></div>
    <div class="mr"><span>Zoom</span><div class="chips"><button data-z="-1">−</button><b class="zv">100%</b><button data-z="1">+</button></div></div>
@@ -70,13 +109,14 @@ function mountPlayer(box, f, opts = {}) {
   <div class="bar2"><button data-a="play" aria-label="Play">${ICON.play}</button><button data-a="back" aria-label="Back 5 seconds">${ICON.back}</button><button data-a="fwd" aria-label="Forward 5 seconds">${ICON.fwd}</button>
   <div class="volw"><button data-a="mute" aria-label="Mute">${ICON.vol}</button><input class="vol" type="range" min="0" max="100" value="100" aria-label="Volume"></div><span class="sp"></span>
   <button data-a="cc" class="cc" aria-label="Subtitles" hidden>${ICON.cc}</button><button data-a="set" aria-label="Settings">${ICON.gear}</button>
-  <button data-a="pip" aria-label="Picture in picture" ${document.pictureInPictureEnabled ? '' : 'hidden'}>${ICON.pip}</button><button data-a="fs" aria-label="Fullscreen">${ICON.fs}</button></div></div></div>`;
-  const P = box.querySelector('.player'), v = P.querySelector('video'), $ = (s) => P.querySelector(s);
+  <button data-a="pip" aria-label="Picture in picture" ${document.pictureInPictureEnabled && !opts.yt ? '' : 'hidden'}>${ICON.pip}</button><button data-a="fs" aria-label="Fullscreen">${ICON.fs}</button></div></div></div>`;
+  const P = box.querySelector('.player'), wrap = P.querySelector('.vwrap'), $ = (s) => P.querySelector(s);
+  const v = opts.yt ? ytAdapter(P.querySelector('.ytbox'), opts.yt, P) : P.querySelector('video');
   const seek = $('.seek'), vol = $('.vol'), osd = $('.osd'), cc = $('.cc'), subsEl = $('.subs'), menu = $('.menu');
   const playB = $('[data-a=play]'), muteB = $('[data-a=mute]');
   let hover = false, idle, osdT, cues = [], zoom = 1, raf, shown = '', loaded = false;
   let subsOn = localStorage.getItem('subs') !== 'off', subSz = +localStorage.getItem('subsz') || 1;
-  v.src = src;
+  if (!opts.yt) v.src = src;
   const to = setTimeout(() => { if (!loaded && opts.timeout) { fail(); } }, opts.timeout || 0);
 
   const say = (t) => { osd.textContent = t; osd.classList.add('on'); clearTimeout(osdT); osdT = setTimeout(() => osd.classList.remove('on'), 900); };
@@ -92,7 +132,7 @@ function mountPlayer(box, f, opts = {}) {
   };
   const refreshSubUI = () => { cc.classList.toggle('off', !subsOn); $('[data-s=onoff]').textContent = subsOn ? 'On' : 'Off'; $('[data-s=onoff]').classList.toggle('on', subsOn); showSub(); };
   const toggleSubs = () => { if (!cues.length) return; subsOn = !subsOn; localStorage.setItem('subs', subsOn ? 'on' : 'off'); refreshSubUI(); say(subsOn ? 'Subtitles on' : 'Subtitles off'); };
-  const setZoom = (d) => { zoom = Math.min(3, Math.max(1, zoom + d * 0.25)); v.style.transform = `scale(${zoom})`; $('.zv').textContent = Math.round(zoom * 100) + '%'; };
+  const setZoom = (d) => { zoom = Math.min(3, Math.max(1, zoom + d * 0.25)); wrap.style.transform = `scale(${zoom})`; $('.zv').textContent = Math.round(zoom * 100) + '%'; };
   const tick = () => { showSub(); if (document.body.contains(P) && !v.paused) raf = requestAnimationFrame(tick); };
 
   v.onplay = () => { playB.innerHTML = ICON.pause; cancelAnimationFrame(raf); tick(); };
@@ -101,6 +141,7 @@ function mountPlayer(box, f, opts = {}) {
   v.ontimeupdate = upd; v.onloadedmetadata = () => { loaded = true; clearTimeout(to); upd(); };
   v.onvolumechange = () => { vol.value = v.muted ? 0 : v.volume * 100; vol.style.setProperty('--p', vol.value + '%'); muteB.innerHTML = v.muted || v.volume === 0 ? ICON.mute : ICON.vol; };
   v.onerror = () => { clearTimeout(to); fail(); };
+  v.onended = () => opts.onended && opts.onended();
   seek.oninput = () => { if (v.duration) v.currentTime = (seek.value / 1000) * v.duration; seek.style.setProperty('--p', seek.value / 10 + '%'); };
   vol.oninput = () => { v.muted = false; v.volume = vol.value / 100; };
   P.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => ({ play: toggle, back: () => skip(-5), fwd: () => skip(5), mute: () => (v.muted = !v.muted), cc: toggleSubs, fs,
@@ -112,8 +153,9 @@ function mountPlayer(box, f, opts = {}) {
     if (z) setZoom(+z.dataset.z);
     if (s) { if (s.dataset.s === 'onoff') toggleSubs(); else { subSz = Math.min(2.2, Math.max(0.6, subSz + 0.15 * s.dataset.s)); localStorage.setItem('subsz', subSz); sizeSubs(); } }
   });
-  v.onclick = () => { if (!menu.hidden) { menu.hidden = true; return; } P.focus({ preventScroll: true }); toggle(); };
-  v.ondblclick = fs;
+  const cat = $('.catch');
+  cat.onclick = () => { if (!menu.hidden) { menu.hidden = true; return; } P.focus({ preventScroll: true }); toggle(); };
+  cat.ondblclick = fs;
   new ResizeObserver(sizeSubs).observe(P); sizeSubs();
 
   // عجلة الماوس للصوت في وضع الفول سكرين بس
@@ -131,7 +173,7 @@ function mountPlayer(box, f, opts = {}) {
   P.onmousemove = () => { P.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(() => { if (!v.paused && menu.hidden) P.classList.add('idle'); }, 2500); };
 
   // الترجمة بتتركب تلقائي من ملف .srt/.vtt ولها زرار إيقاف
-  if (f.subtitle) fetchText(f.subtitle).then((t) => { cues = parseSubs(t); if (cues.length) { cc.hidden = false; $('.msub').hidden = false; refreshSubUI(); } }).catch(() => {});
+  if (f.subtitle) fetchText(resolveSub(f.subtitle)).then((t) => { cues = parseSubs(t); if (cues.length) { cc.hidden = false; $('.msub').hidden = false; refreshSubUI(); } }).catch(() => {});
 }
 
 /* ===== عارض النصوص والكود ===== */
@@ -167,17 +209,23 @@ function mountViewer(host, f) {
     (hasUrl && !['drive', 'youtube', 'link', 'note'].includes(k) ? ` <a class="btn ghost sm" href="${esc(abs(f.url))}" download>Download</a>` : '');
   host.innerHTML = `<div class="viewer"><div class="vhead"><h2>${esc(f.title)}</h2><div class="acts">${k === 'note' ? '' : acts}</div></div><div class="vbody"></div></div>`;
   const b = host.querySelector('.vbody'), u = esc(f.url || '');
-  if (k === 'video') mountPlayer(b, f);
+  const end = { onended: () => markDone(f.id) };
+  if (k === 'video') mountPlayer(b, f, end);
   else if (k === 'text') mountText(b, f);
   else if (k === 'pdf') b.innerHTML = `<iframe class="frame tall" src="${u}" title="${esc(f.title)}"></iframe>`;
   else if (k === 'office') b.innerHTML = `<iframe class="frame tall" src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs(f.url))}"></iframe><p class="hint">The preview works once the site is online. Use "Open in new page" or Download otherwise.</p>`;
   else if (k === 'drive') {
-    const m = (f.url || '').match(/\/d\/([\w-]+)/) || (f.url || '').match(/[?&]id=([\w-]+)/);
-    const frame = () => { b.innerHTML = `<div class="dframe"><iframe class="frame ${f.video ? '' : 'tall'}" src="${esc(drivePrev(f.url))}" allow="autoplay; fullscreen" allowfullscreen></iframe><div class="dmask"></div></div>`; };
-    // فيديو درايف: بنجرب المشغل الجديد، ولو درايف رفض بنرجع لمشغل درايف تلقائي
-    if (f.video && m) mountPlayer(b, f, { src: `https://drive.usercontent.google.com/download?id=${m[1]}&export=download&confirm=t`, onfail: frame, timeout: 12000 });
-    else frame();
+    const id = driveId(f.url), key = DATA.driveKey;
+    const frame = () => { b.innerHTML = `<div class="dframe"><iframe class="frame tall" src="${esc(drivePrev(f.url))}" allow="autoplay; fullscreen" allowfullscreen></iframe><div class="dmask"></div></div>`; };
+    // مع مفتاح Drive: لو الملف فيديو بنشغله في مشغلنا (بترجمة)، وأي مشكلة بنرجع لمشغل درايف
+    if (key && id) {
+      b.innerHTML = '<div class="loading">Loading...</div>';
+      fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=mimeType&key=${key}`).then((r) => (r.ok ? r.json() : Promise.reject())).then((m) => {
+        if ((m.mimeType || '').startsWith('video/')) mountPlayer(b, f, { src: driveMedia(id), onfail: frame, timeout: 15000, ...end }); else frame();
+      }).catch(frame);
+    } else frame();
   }
+  else if (k === 'youtube' && ytId(f.url)) mountPlayer(b, f, { yt: ytId(f.url), ...end });
   else if (k === 'youtube') b.innerHTML = `<iframe class="frame" src="${esc(ytEmbed(f.url))}" allowfullscreen></iframe>`;
   else if (k === 'image') b.innerHTML = `<img class="img" src="${u}" alt="${esc(f.title)}">`;
   else if (k === 'note') { b.innerHTML = `<div class="tbar"><button class="btn ghost sm">Copy all</button></div><pre class="plain">${linkify(f.note)}</pre>`; b.querySelector('button').onclick = (e) => copyText(f.note || '', e.target); }
@@ -188,6 +236,12 @@ function mountViewer(host, f) {
 function crumbs(id, last) {
   const parts = chain(id).map((n) => `<a href="#/f/${n.id}">${esc(n.title)}</a>`);
   return `<nav class="crumbs"><a href="#/">Home</a>${parts.map((p) => ' / ' + p).join('')}${last ? ' / <span>' + esc(last) + '</span>' : ''}</nav>`;
+}
+function markDone(id) {
+  const d = getDone(); if (!d.has(id)) { d.add(id); setDone(d); }
+  app.querySelectorAll(`[data-tick="${id}"]`).forEach((t) => { t.classList.add('done'); t.textContent = '✓'; });
+  const rows = [...app.querySelectorAll('.side [data-tick]')], p = rows.length ? Math.round((rows.filter((r) => r.classList.contains('done')).length / rows.length) * 100) : 0;
+  const bar = app.querySelector('.side .bar i'), sm = app.querySelector('.side small'); if (bar) bar.style.width = p + '%'; if (sm) sm.textContent = p + '% complete';
 }
 function toggleDone(id, again) { const d = getDone(); d.has(id) ? d.delete(id) : d.add(id); setDone(d); again(); }
 function fileRows(list) {
@@ -220,9 +274,10 @@ function fileView(id) {
   app.innerHTML = crumbs(id, f.title) + `<div class="course"><aside class="side"><div class="bar"><i style="width:${pct}%"></i></div><small class="muted">${pct}% complete</small>
     ${pid !== 'root' ? `<h4><a href="#/f/${pid}">&larr; ${esc(byId[pid].title)}</a></h4>` : ''}
     <div class="flist mini">${fileRows(sibs).replace(`data-go="${id}"`, `data-go="${id}" data-on="1"`)}</div></aside>
-    <div><div id="host"></div><div class="pn">${sibs[i - 1] ? `<a class="btn ghost sm" href="#/v/${sibs[i - 1].id}">&larr; Previous</a>` : '<span></span>'}${sibs[i + 1] ? `<a class="btn ghost sm" href="#/v/${sibs[i + 1].id}">Next &rarr;</a>` : ''}</div></div></div>`;
+    <div><div id="host"></div><div class="pn">${sibs[i - 1] ? `<a class="btn ghost sm" href="#/v/${sibs[i - 1].id}">&larr; Previous</a>` : '<span></span>'}<button class="btn sm" id="nxt">${sibs[i + 1] ? (d.has(id) ? 'Next' : 'Done &amp; Next') + ' &rarr;' : d.has(id) ? 'Completed ✓' : 'Mark as done ✓'}</button></div></div></div>`;
   app.querySelectorAll('[data-on]').forEach((r) => r.classList.add('on'));
   wireRows(() => fileView(id));
+  document.getElementById('nxt').onclick = () => { markDone(id); if (sibs[i + 1]) location.hash = '#/v/' + sibs[i + 1].id; };
   mountViewer(document.getElementById('host'), f);
 }
 
