@@ -14,7 +14,15 @@
               "id": "mwrpft06x19t",
               "type": "folder",
               "title": "Math 0",
-              "children": []
+              "children": [
+                {
+                  "id": "mwrprofjppot",
+                  "type": "file",
+                  "title": "lecture 1",
+                  "kind": "drive",
+                  "url": "https://drive.google.com/file/d/1ETQQaxBu16WNkVreJN6jdg5uuqKa3I8o/view?usp=drive_link"
+                }
+              ]
             },
             {
               "id": "mwrpg31qilmd",
